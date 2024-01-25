@@ -33,7 +33,7 @@ with col1:
             st.write(df)
     else:
         # Read data from the default Excel file
-        #os.chdir(r"C:\Users\monda\Downloads\BI Project")
+        #os.chdir(r"default directory containing the file")
         df = pd.read_excel("temp_humid_data_one.xlsx")
         st.write("Data from default Excel file:")
         st.write(df)
