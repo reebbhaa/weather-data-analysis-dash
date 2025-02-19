@@ -9,8 +9,8 @@ warnings.filterwarnings('ignore')
 
 #Setting the title and page icon
 st.set_page_config(page_title="WEATHER", page_icon=":sun_behind_rain_cloud:", layout="wide")
-st.markdown("<h1 style='text-align: center;'>🌦️ Weather Data Analysis</h1>", unsafe_allow_html=True)
-st.markdown('<style>div.block-container{padding-top:1rem;}</style>',unsafe_allow_html=True)
+st.title("<h1 style='text-align: center;'>🌦️ Weather Data Analysis</h1>", unsafe_allow_html=True)
+#st.markdown('<style>div.block-container{padding-top:1rem;}</style>',unsafe_allow_html=True)
 
 
 
