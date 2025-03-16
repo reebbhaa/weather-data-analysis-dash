@@ -5,249 +5,615 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
 import warnings
-warnings.filterwarnings('ignore')
+import time
+from wordcloud import WordCloud
+import nltk
+from nltk.tokenize import word_tokenize
+from collections import Counter
+import matplotlib.pyplot as plt
+from nltk.corpus import stopwords
 
-#Setting the title and page icon
-st.set_page_config(page_title="WEATHER", page_icon=":sun_behind_rain_cloud:", layout="wide")
-st.title(':partly_sunny_rain: Weather Data Analysis')
-#st.markdown('<style>div.block-container{padding-top:1rem;}</style>',unsafe_allow_html=True)
+# Configure NLTK data path
+nltk.data.path.append(os.path.expanduser('~/nltk_data'))
+
+# Download required NLTK data
+nltk.download('punkt', quiet=True,
+              download_dir=os.path.expanduser("~/nltk_data"))
+nltk.download('punkt_tab', quiet=True,
+              download_dir=os.path.expanduser("~/nltk_data"))
+nltk.download('averaged_perceptron_tagger_eng', quiet=True,
+              download_dir=os.path.expanduser("~/nltk_data"))
+
+warnings.filterwarnings("ignore")
+
+# Setting the title and page icon
+st.set_page_config(
+    page_title="Evaluator", page_icon=":material/grading:", layout="wide"
+)
 
 
+def authors():
+    st.title("📚 Authors & Their Work")
+    # Mock data - Replace with actual database query
+    df = pd.DataFrame({
+        "Author": ["Alice", "Bob", "Alice", "Charlie", "Bob"],
+        "Title": ["Story 1", "Essay 1", "Story 2", "Poem 1", "Essay 2"],
+        "Grade": [85, 90, 88, 75, 92],
+        "Date": pd.to_datetime(["2024-01-01", "2024-01-10", "2024-02-15", "2024-03-01", "2024-04-05"])
+    })
+    # Search Bar on Main Page
+    search_query = st.text_input("🔍 Search for an Author")
 
-# Options to upload a file
-fl = st.file_uploader(":file_folder: Upload a file", type=["csv", "xlsx", "xls"])
-#partitioning the page
-col1, col2 = st.columns((2))
-with col1:
-    if fl is not None:
-        # Check file type and read accordingly
-        if fl.type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-            # Excel file
-            df = pd.read_excel(fl)
-            st.write("Data from uploaded Excel file:")
-            st.write(df)
-        else:
-            # Assume other formats as CSV
-            df = pd.read_csv(fl, encoding="ISO-8859-1")
-            st.write("Data from uploaded CSV file:")
-            st.write(df)
+    # Filtering based on search query
+    if search_query:
+        filtered_authors = df[df["Author"].str.contains(
+            search_query, case=False, na=False)]
+        author_list = filtered_authors["Author"].unique()
     else:
-        # Read data from the default Excel file
-        #os.chdir(r"default directory containing the file")
-        df = pd.read_excel("temp_humid_data_one.xlsx")
-        st.write("Data from default Excel file:")
-        st.write(df)
+        author_list = df["Author"].unique()
 
-df["time"]=pd.to_datetime(df["time"])
-# Create a new column "month" with the month information
-df["month"] = df["time"].dt.strftime('%B')
-# Create a new column "year" with the year information
-df["year"] = df["time"].dt.year
-# Create a new column "day" with the year information
-df["day"] = df["time"].dt.day
+    # Filtering based on search query
+    if search_query:
+        filtered_authors = df[df["Author"].str.contains(
+            search_query, case=False, na=False)]
+        author_list = filtered_authors["Author"].unique()
+    else:
+        author_list = df["Author"].unique()
 
-st.sidebar.header("Choose your filter: ")
-# Create for Month
-month = st.sidebar.multiselect("Pick the Months", df["month"].unique())
-if not month:
-    df2 = df.copy()
-else:
-    df2 = df[df["month"].isin(month)].copy()
+    # Filtering based on search query
+    if search_query:
+        author_data = df[df["Author"].str.contains(
+            search_query, case=False, na=False)]
+    else:
+        author_data = df
 
-# Create for Year
-year = st.sidebar.multiselect("Pick the Years", df["year"].unique())
-if not year:
-    df3 = df.copy()
-else:
-    df3 = df[df["year"].isin(year)].copy()
+    # Display Featured Authors (Top Performers)
+    st.subheader("🌟 Featured Authors")
+    top_authors = df.groupby("Author")["Grade"].mean().nlargest(3).index
+    st.write(", ".join(top_authors))
 
-# Filter the data based on Region, State, and City
-if not month and not year:
-    filtered_df = df.copy()
-elif not year:
-    filtered_df = df3
-elif not month:
-    filtered_df = df2
-else:
-    filtered_df = df[df2["month"].isin(month) & df3["year"].isin(year)].copy()
+    # Show Author Work Table
+    st.subheader(f"Works by {search_query}" if search_query else "All Works")
+    st.dataframe(author_data)
 
-# Reset index after filtering
-filtered_df.reset_index(drop=True, inplace=True)
+    # Show improvement if a single author is searched
+    if search_query and not author_data.empty:
+        st.subheader("📈 Grade Improvement Over Time")
+        fig = px.line(author_data, x="Date", y="Grade",
+                      title=f"{search_query}'s Grade Progress", markers=True)
+        st.plotly_chart(fig)
 
-with col2:
-    st.write("Data After Filtering:")
-    st.write(filtered_df)
 
-filter_dataset=filtered_df.copy()
+def home():
+    # st.title(":material/grading: Writing Evaluation")
+    st.title("🏡 AI Writing Evaluator")
+    st.subheader("Welcome to the 826 Valencia AI Writing Evaluator!")
 
-#Overview of the dataset 
-with col1:
-    # Define the desired order of the months
-    month_order = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+    st.markdown(
+        """
+        Providing feedback on student writing is essential, but we know it can be time-consuming.
+        This tool is designed to help **826 Valencia's staff and volunteers** efficiently assess writing samples while maintaining
+        the personal touch that makes mentorship so valuable.
 
-    # Convert the 'month' column to a categorical data type with the desired order
-    filter_dataset['month'] = pd.Categorical(filter_dataset['month'], categories=month_order, ordered=True)
+        With AI-powered evaluation, you can:  
+        ✅ **Quickly analyze writing samples** based on 826 Valencia's grading rubric.  
+        ✅ **Receive high-quality, personalized feedback** tailored to each student's strengths and areas for improvement.  
+        ✅ **Save time and focus on mentorship** by reducing the administrative burden of grading.
 
-    # Check if any months are selected
-    if month:
-        # Create a DataFrame with the necessary columns
-        selected_months_df = filter_dataset[filter_dataset['month'].isin(month)]
+        **Our goal?** To empower educators and volunteers with a **fast, easy-to-use, and cost-effective**
+        solution for evaluating student writing, so you can spend more time inspiring creativity!
         
-        # Group by month and calculate Mean, Average, and Maximum temperature
-        grouped_df = selected_months_df.groupby('month')['temperature_mean'].agg(['mean', 'median', 'max']).reset_index()
-
-        title = 'Mean, Median, and Maximum Temperature of Selected Months'
-    else:
-        # Calculate Mean, Median, and Maximum temperature for the entire dataset
-        grouped_df = filter_dataset.groupby('month')['temperature_mean'].agg(['mean', 'median', 'max']).reset_index()
-
-        title = 'Mean, Median, and Maximum Temperature of All Months'
-
-    # Create a bar plot using plotly express
-    fig = px.bar(grouped_df, x='month', y=['mean', 'median', 'max'],
-                labels={'value': 'Temperature'},
-                title=title,
-                barmode='group')
-
-    # Update layout
-    fig.update_layout(xaxis=dict(title='Month', categoryorder='array', categoryarray=month_order), yaxis=dict(title='Temperature'))
-
-    # Show the plot
-    st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    # Check if any months are selected
-    if month:
-        # Create a DataFrame with the necessary columns
-        selected_months_df = filter_dataset[filter_dataset['month'].isin(month)]
+        - ------------------
         
-        # Group by month and calculate Mean, Average, and Maximum temperature
-        grouped_df = selected_months_df.groupby('month')['relativehumidity_mean'].agg(['mean', 'median', 'max']).reset_index()
+        ## 📝 How It Works
 
-        title = 'Mean, Median, and Maximum Related Humidity of Selected Months'
-    else:
-        # Calculate Mean, Median, and Maximum temperature for the entire dataset
-        grouped_df = filter_dataset.groupby('month')['relativehumidity_mean'].agg(['mean', 'median', 'max']).reset_index()
+        ### 1️⃣ Choose Your Upload Method:
 
-        title = 'Mean, Median, and Maximum Relative Humidity of all Months'
+        - **File Upload:** Upload a single student writing sample or multiple writing samples(.txt, .docx, .pdf).
 
-    # Create a bar plot using plotly express
-    fig = px.bar(grouped_df, x='month', y=['mean', 'median', 'max'],
-                labels={'value': 'Relative Humidity'},
-                title=title,
-                barmode='group')
+        ### 2️⃣ AI-Powered Evaluation:
 
-    # Update layout
-    fig.update_layout(xaxis=dict(title='Month',categoryorder='array', categoryarray=month_order), yaxis=dict(title='Relative Humidity'))
-    # Show the plot
-    st.plotly_chart(fig, use_container_width=True)
+        - The tool will analyze writing based on 826 Valencia’s grading rubric.
+        - It provides **structured scores** and **detailed feedback**, including actionable suggestions for improvement.
+
+        ### 3️⃣ Review & Download Feedback:
+
+        - View the results instantly on the platform.
+        - Download feedback reports for individual or bulk submissions.
+
+        ### 4️⃣ Use Feedback for Mentorship:
+
+        - Share AI-generated insights with students.
+        - Provide personalized guidance based on AI suggestions.
+        """
+
+    )
 
 
+def writing_evaluation():
+    st.title(":material/grading: Writing Evaluator")
+    st.subheader(
+        "Upload a file to evaluate the writing based on the 826 Valencia Rubric.")
+    # Options to upload a file
+    fl = st.file_uploader(":file_folder: Upload a file or multiple files.",
+                          type=["pdf", "jpeg", "jpg", "png"])
 
-#Scatter Plot with Trend Line: Temperature vs Relative Humidity
-with col1:
-    #Scatter plot 
-    from scipy.stats import linregress
-    import numpy as np
-    # Create a scatter plot using Plotly Express
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=filtered_df['temperature_mean'], y=filtered_df['relativehumidity_mean'],
-                            mode='markers', name='Temperature vs Relative Humidity',
-                            marker=dict(color='blue'),showlegend=False))
+    # TODO: Send files to the backend API
+    # Simulated API response (Replace this with actual API call)
+    if fl:
+        st.info("Processing your file(s)... Please wait.")
+        time.sleep(2)  # Simulating delay
 
-    # Calculate linear regression
-    slope, intercept, _, _, _ = linregress(filtered_df['temperature_mean'], filtered_df['relativehumidity_mean'])
-    x_line = np.linspace(filtered_df['temperature_mean'].min(), filtered_df['temperature_mean'].max(), 100)
-    y_line = slope * x_line + intercept
+        # Display results
+        st.success("Evaluation Complete! Here are the results:")
+        # Detect Streamlit Theme (Light/Dark Mode)
+        theme = st.get_option("theme.base")
+        light_mode = theme == "light"
 
-    # Add trend line
-    fig.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', name='Trend Line', line=dict(color='red', dash='dash'),showlegend=False))
+        # Define rubric criteria based on 826 Valencia grading rubric
+        rubric_criteria = [
+            "Ideas", "Organization", "Voice", "Word Choice",
+            "Sentence Fluency", "Conventions"
+        ]
 
-    # Update layout
-    fig.update_layout(title='Scatter Plot with Trend Line: Temperature vs Relative Humidity',
-                    xaxis=dict(title='Temperature'),
-                    yaxis=dict(title='Relative Humidity', showgrid=False))
+        # Mock evaluation results (Replace with real backend results)
+        evaluation_results = {
+            "Ideas": {"score": 5, "comment": "Strong ideas, but needs more supporting details."},
+            "Organization": {"score": 4, "comment": "Well-structured, logical sequence of thoughts."},
+            "Voice": {"score": 3, "comment": "Engaging but could be more distinctive."},
+            "Word Choice": {"score": 2, "comment": "Good vocabulary but some repetitive words."},
+            "Sentence Fluency": {"score": 3, "comment": "Smooth flow, but some choppy transitions."},
+            "Conventions": {"score": 2, "comment": "Some grammar and punctuation errors."}
+        }
+        # Extract comments
+        all_comments = " ".join([v["comment"]
+                                for v in evaluation_results.values()])
 
-    # Show the plot
-    st.plotly_chart(fig, use_container_width=True)
-#Interactive Correlation Plot: Temperature vs Relative Humidit
-with col2:
-    # Create a DataFrame with temperature and relative humidity
-    correlation_df = filtered_df[['temperature_mean', 'relativehumidity_mean']]
+        # Convert data to DataFrame for visualization
+        df = pd.DataFrame(
+            [(k, v["score"]) for k, v in evaluation_results.items()],
+            columns=["Criterion", "Score"]
+        )
 
-    # Calculate the correlation matrix
-    correlation_matrix = correlation_df.corr()
+        # 📝 Feedback Table
+        st.subheader("💡 Feedback & Comments")
 
-    # Create an interactive heatmap using plotly express
-    fig = px.imshow(correlation_matrix, labels=dict(color="Correlation"), color_continuous_scale='Viridis')
+        # Apply dark mode or light mode styles dynamically
+        table_bg_color = "#f4f4f4" if light_mode else "#333333"
+        table_text_color = "#000000" if light_mode else "#f4f4f4"
+        border_color = "#dddddd" if light_mode else "#555555"
 
-    # Update layout
-    fig.update_layout(title='Interactive Correlation Plot: Temperature vs Relative Humidity',
-                    xaxis=dict(title='Variable'),
-                    yaxis=dict(title='Variable'))
+        comments_html = f"""
+        <style>
+            table {{ width: 100%; border-collapse: collapse; font-size: 16px; }}
+            th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid {border_color}; }}
+            th {{ background-color: {table_bg_color}; color: {table_text_color}; }}
+            td {{ background-color: transparent; color: {table_bg_color}; }}
+        </style>
+        <table>
+            <tr><th>Criterion</th><th>Score</th><th>Feedback</th></tr>
+        """
+        for criterion in rubric_criteria:
+            score = evaluation_results[criterion]["score"]
+            comment = evaluation_results[criterion]["comment"]
+            comments_html += f"<tr><td><b>{criterion}</b></td><td>{score}</td><td>{comment}</td></tr>"
+        comments_html += "</table>"
 
-    # Show the plot
-    st.plotly_chart(fig, use_container_width=True)
+        st.markdown(comments_html, unsafe_allow_html=True)
 
-#for day Comparison between Temperature and Humidity over Days
-# Group by day and calculate the average for each day
-grouped_df = filtered_df.groupby('day').agg({'temperature_mean': 'mean', 'relativehumidity_mean': 'mean'}).reset_index()
+        word_cloud(all_comments, light_mode)
+        # 🎨 Bar Chart Visualization
+        st.subheader("📊 Writing Evaluation Results")
+        fig = px.bar(df, x="Criterion", y="Score", text="Score",
+                     color="Score", color_continuous_scale="blues")
+        fig.update_traces(textposition="outside")
+        fig.update_layout(yaxis_range=[0, 5], height=400)
+        st.plotly_chart(fig, use_container_width=True)
 
-# Melt the DataFrame to have a single column for values and another for the variable
-melted_df = pd.melt(grouped_df, id_vars=['day'], value_vars=['temperature_mean', 'relativehumidity_mean'],
-                    var_name='Variable', value_name='Value')
 
-# Create a dual-axis line chart using Plotly Express and make_subplots
-fig = make_subplots(specs=[[{'secondary_y': True}]])
+def word_cloud(all_comments, light_mode):
 
-# Line colors for temperature and relative humidity
-temperature_color = 'blue'
-humidity_color = 'orange'
+    # Tokenize words and identify adjectives
+    words = word_tokenize(all_comments)
+    tagged_words = nltk.pos_tag(words)  # POS tagging
 
-# Add traces with specified line colors
-fig.add_trace(go.Scatter(x=melted_df['day'], y=melted_df['Value'][melted_df['Variable']=='temperature_mean'],
-                         mode='lines', name='Temperature', line=dict(color=temperature_color)))
-fig.add_trace(go.Scatter(x=melted_df['day'], y=melted_df['Value'][melted_df['Variable']=='relativehumidity_mean'],
-                         mode='lines', name='Relative Humidity', line=dict(color=humidity_color)),
-              secondary_y=True)
+    # List of positive adjectives (expandable)
+    positive_adjectives = {
+        "strong", "creative", "engaging", "good", "smooth",
+        "clear", "logical", "distinctive", "visually", "improving",
+        "excellent", "amazing", "fantastic", "brilliant", "creative",
+        "engaging", "insightful", "clear", "strong", "persuasive",
+        "compelling", "impressive", "remarkable", "eloquent", "thoughtful"
+    }
 
-# Update layout
-fig.update_layout(title='Comparison between Temperature and Humidity over Days',
-                  xaxis=dict(title='Day'),
-                  yaxis=dict(title='Temperature', showgrid=False),
-                  yaxis2=dict(title='Relative Humidity', showgrid=False, overlaying='y', side='right'))
-# Show the plot
-st.plotly_chart(fig,use_container_width=True, height = 200)
+    # Filter adjectives from comments
+    filtered_words = [word for word, tag in tagged_words if tag in (
+        "JJ", "JJR", "JJS") and word.lower() in positive_adjectives]
 
-#For Months Comparison between Temperature and Humidity over Months
-# Group by month and calculate the average for each month
-grouped_df = filtered_df.groupby('month').agg({'temperature_mean': 'mean', 'relativehumidity_mean': 'mean'}).reset_index()
+    # Generate Word Cloud
+    wordcloud_text = " ".join(filtered_words)
+    wordcloud = WordCloud(
+        width=800, height=400, background_color="white" if light_mode else "white",
+        colormap="Blues" if light_mode else "coolwarm"
+    ).generate(wordcloud_text)
 
-# Melt the DataFrame to have a single column for values and another for the variable
-melted_df = pd.melt(grouped_df, id_vars=['month'], value_vars=['temperature_mean', 'relativehumidity_mean'],
-                    var_name='Variable', value_name='Value')
+    # Display Word Cloud
+    st.subheader("🌟 Word Cloud")
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.imshow(wordcloud, interpolation="bilinear")
+    ax.axis("off")  # Hide axes
+    st.pyplot(fig)
 
-# Create a plot using Plotly Express and make_subplots
-fig = make_subplots(specs=[[{'secondary_y': True}]])
 
-# Check if only one month is selected
-if len(filtered_df['month'].unique()) == 1:
-    # Show a bar plot for mean values when a single month is selected
-    fig.add_trace(go.Bar(x=['Temperature', 'Relative Humidity'], y=[grouped_df['temperature_mean'].iloc[0], grouped_df['relativehumidity_mean'].iloc[0]],
-                         marker=dict(color=['blue', 'orange'])))
-else:
-    # Show a line plot when multiple months are selected
-    fig.add_trace(go.Scatter(x=melted_df['month'], y=melted_df['Value'][melted_df['Variable']=='temperature_mean'],
-                             mode='lines', name='Temperature Mean', line=dict(color='blue')))
-    fig.add_trace(go.Scatter(x=melted_df['month'], y=melted_df['Value'][melted_df['Variable']=='relativehumidity_mean'],
-                             mode='lines', name='Relative Humidity Mean', line=dict(color='orange')),
-                  secondary_y=True)
+def about():
+    st.title("ℹ️ About")
+    # Run function to display rubric
+    display_rubric()
+    # st.write("This is an app built with Streamlit.")
 
-# Update layout
-fig.update_layout(title='Comparison between Temperature and Humidity over Months',
-                  xaxis=dict(title='Months/Metric'),
-                  yaxis=dict(title='Temperature', showgrid=False),
-                  yaxis2=dict(title='Relative Humidity', showgrid=False, overlaying='y', side='right'))
 
-# Show the plot
-st.plotly_chart(fig, use_container_width=True, height=200)
+def contact():
+    st.title("📞 Contact")
+    st.write("Reach out at contact@example.com")
+
+
+pg = st.navigation([
+    st.Page(home, title="Home"),
+    st.Page(authors, title="Authors"),
+    st.Page(writing_evaluation, title="Evaluate"),
+    st.Page(about, title="About"),
+    st.Page(contact, title="Contact")
+])
+
+
+def display_rubric():
+    st.title(":scroll: 826 Valencia Grading Rubric")
+    st.subheader(
+        "📖 This rubric outlines the key criteria for evaluating student writing.")
+
+    # Define the rubric with CSS that adapts to light and dark mode
+    rubric_html = """
+    <style>
+        /* Use Streamlit's built-in theme variables */
+        :root {
+            --background-light: #ffffff;
+            --background-dark: #262730;
+            --text-light: #000000;
+            --text-dark: #ffffff;
+            --border-light: #ddd;
+            --border-dark: #444;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            table { background-color: var(--background-dark); color: var(--text-dark); }
+            th, td { border-color: var(--border-dark); }
+            th { background-color: #333; }
+        }
+
+        @media (prefers-color-scheme: light) {
+            table { background-color: var(--background-light); color: var(--text-light); }
+            th, td { border-color: var(--border-light); }
+            th { background-color: #f4f4f4; }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 16px;
+            text-align: left;
+        }
+        th, td {
+            border: 1px solid;
+            padding: 12px;
+            word-wrap: break-word;
+        }
+        td {
+            vertical-align: top;
+        }
+    </style>
+    
+    <table>
+        <tr>
+            <th>Criterion</th>
+            <th>Exceptional (5)</th>
+            <th>Experienced (4)</th>
+            <th>Proficient (3)</th>
+            <th>Emerging (2)</th>
+            <th>Beginning (1)</th>
+        </tr>
+        <tr>
+            <td><b>Ideas & Content</b></td>
+            <td>I have a clear, focused, important, and fully developed main idea, with original thoughts and opinions.</td>
+            <td>I have a clear, focused, and fully developed main idea, but can share my own thoughts and opinions more creatively.</td>
+            <td>I have a generally clear, focused, and accurate main idea, but I need to share creative ideas.</td>
+            <td>I have a focus, but I need to make my main idea clearer.</td>
+            <td>I started my writing, but I need to add ideas connected to the topic.</td>
+        </tr>
+        <tr>
+            <td><b>Organization</b></td>
+            <td>I have a clear purpose, satisfying conclusion, and use thoughtful, varied language to keep the reader's attention.</td>
+            <td>I have a clear purpose throughout my writing and use transitions to connect different ideas, but my writing needs more variety. My ideas are separated into different paragraphs.</td>
+            <td>I have sentences that make sense together, but I need to cover the main ideas clearly in paragraphs with purposeful transitions.</td>
+            <td>I have sentences but I need to organize my ideas into a clear paragraph and add transitions. </td>
+            <td>I have sentences, but I can organize them better so they make more sense. </td>
+        </tr>
+        <tr>
+            <td><b>Voice</b></td>
+            <td>I have a strong tone that supports my topic and engages the reader, and I consistently use a variety of techniques to enhance the flavor of my writing.</td>
+            <td>I use a tone that supports my topic and engages my reader, but my writing needs to explore my perspective more and consider the audience.</td>
+            <td>I have shown some of my personality and opinions, but I need to add more flavor and hook the reader more.</td>
+            <td>I shared my opinion, but I can express how I feel about the topic better.</td>
+            <td>I have sentences, but I need to express my opinion.</td>
+        </tr>
+        <tr>
+            <td><b>Word Choice</b></td>
+            <td>I use strong and specific words to create imagery for my reader, but I can add more powerful/varied  types of figurative language.</td>
+            <td>I use a variety of vocabulary, but I can choose more specific words and figurative language to create an image in my reader's mind.</td>
+            <td>I have juicy vocabulary that makes sense, but I can include some figurative language.</td>
+            <td>I have some juicy words, but I can add more juicy words that fit.</td>
+            <td>I have ideas, but I need to make sure I use the right words without repeating.</td>
+        </tr>
+        <tr>
+            <td><b>Sentence Fluency</b></td>
+            <td>I have well-structured sentences with strong rhythm and cadence, and I use varied words/phrases to enhance the flow of the overall writing.</td>
+            <td>I have sentences with rhythm and my ideas flow well between one and the next, but I could use more complex sentences to move the piece forward.</td>
+            <td>I have a variety of sentence beginnings, but I can create more variety in my sentence types for more flow and rhythm.</td>
+            <td>I have sentences that make sense, but I can try using complex and compound sentences.</td>
+            <td> have complete sentences, but they can be reorganized to help my reader understand them better.</td>
+        </tr>
+        <tr>
+            <td><b>Conventions</b></td>
+            <td>My writing is error-free and my choices in punctuation and grammar contribute to the creativity and clarity of the piece. </td>
+            <td>I consistently use correct spelling, punctuation, and grammar, but could introduce a variety of punctuation.</td>
+            <td>My sentences make sense. I have mostly used correct spelling and punctuation, but there are minor errors.</td>
+            <td>I have sentences and the reader understands some of what I'm saying, but I have some errors that make my writing hard to understand.</td>
+            <td>I have ideas, but I need to add periods and capital letters. </td>
+        </tr>
+    </table>
+    """
+
+    # Display the table in Streamlit
+    st.markdown(rubric_html, unsafe_allow_html=True)
+
+
+pg.run()
+# st.navigation([
+#     "home.py",
+#     "about.py",
+#     "contact.py"
+# ])
+
+# # partitioning the page
+# col1, col2 = st.columns((2))
+# with col1:
+#     if fl is not None:
+#         # Check file type and read accordingly
+#         if fl.type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+#             # Excel file
+#             df = pd.read_excel(fl)
+#             st.write("Data from uploaded Excel file:")
+#             st.write(df)
+#         else:
+#             # Assume other formats as CSV
+#             df = pd.read_csv(fl, encoding="ISO-8859-1")
+#             st.write("Data from uploaded CSV file:")
+#             st.write(df)
+#     else:
+#         # Read data from the default Excel file
+#         # os.chdir(r"default directory containing the file")
+#         df = pd.read_excel("temp_humid_data_one.xlsx")
+#         st.write("Data from default Excel file:")
+#         st.write(df)
+
+# df["time"] = pd.to_datetime(df["time"])
+# # Create a new column "month" with the month information
+# df["month"] = df["time"].dt.strftime('%B')
+# # Create a new column "year" with the year information
+# df["year"] = df["time"].dt.year
+# # Create a new column "day" with the year information
+# df["day"] = df["time"].dt.day
+
+
+# # Create for Month
+# month = st.sidebar.multiselect("Pick the Months", df["month"].unique())
+# if not month:
+#     df2 = df.copy()
+# else:
+#     df2 = df[df["month"].isin(month)].copy()
+
+# # Create for Year
+# year = st.sidebar.multiselect("Pick the Years", df["year"].unique())
+# if not year:
+#     df3 = df.copy()
+# else:
+#     df3 = df[df["year"].isin(year)].copy()
+
+# # Filter the data based on Region, State, and City
+# if not month and not year:
+#     filtered_df = df.copy()
+# elif not year:
+#     filtered_df = df3
+# elif not month:
+#     filtered_df = df2
+# else:
+#     filtered_df = df[df2["month"].isin(month) & df3["year"].isin(year)].copy()
+
+# # Reset index after filtering
+# filtered_df.reset_index(drop=True, inplace=True)
+
+# with col2:
+#     st.write("Data After Filtering:")
+#     st.write(filtered_df)
+
+# filter_dataset=filtered_df.copy()
+
+# #Overview of the dataset
+# with col1:
+#     # Define the desired order of the months
+#     month_order = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+#     # Convert the 'month' column to a categorical data type with the desired order
+#     filter_dataset['month'] = pd.Categorical(filter_dataset['month'], categories=month_order, ordered=True)
+
+#     # Check if any months are selected
+#     if month:
+#         # Create a DataFrame with the necessary columns
+#         selected_months_df = filter_dataset[filter_dataset['month'].isin(month)]
+
+#         # Group by month and calculate Mean, Average, and Maximum temperature
+#         grouped_df = selected_months_df.groupby('month')['temperature_mean'].agg(['mean', 'median', 'max']).reset_index()
+
+#         title = 'Mean, Median, and Maximum Temperature of Selected Months'
+#     else:
+#         # Calculate Mean, Median, and Maximum temperature for the entire dataset
+#         grouped_df = filter_dataset.groupby('month')['temperature_mean'].agg(['mean', 'median', 'max']).reset_index()
+
+#         title = 'Mean, Median, and Maximum Temperature of All Months'
+
+#     # Create a bar plot using plotly express
+#     fig = px.bar(grouped_df, x='month', y=['mean', 'median', 'max'],
+#                 labels={'value': 'Temperature'},
+#                 title=title,
+#                 barmode='group')
+
+#     # Update layout
+#     fig.update_layout(xaxis=dict(title='Month', categoryorder='array', categoryarray=month_order), yaxis=dict(title='Temperature'))
+
+#     # Show the plot
+#     st.plotly_chart(fig, use_container_width=True)
+
+# with col2:
+#     # Check if any months are selected
+#     if month:
+#         # Create a DataFrame with the necessary columns
+#         selected_months_df = filter_dataset[filter_dataset['month'].isin(month)]
+
+#         # Group by month and calculate Mean, Average, and Maximum temperature
+#         grouped_df = selected_months_df.groupby('month')['relativehumidity_mean'].agg(['mean', 'median', 'max']).reset_index()
+
+#         title = 'Mean, Median, and Maximum Related Humidity of Selected Months'
+#     else:
+#         # Calculate Mean, Median, and Maximum temperature for the entire dataset
+#         grouped_df = filter_dataset.groupby('month')['relativehumidity_mean'].agg(['mean', 'median', 'max']).reset_index()
+
+#         title = 'Mean, Median, and Maximum Relative Humidity of all Months'
+
+#     # Create a bar plot using plotly express
+#     fig = px.bar(grouped_df, x='month', y=['mean', 'median', 'max'],
+#                 labels={'value': 'Relative Humidity'},
+#                 title=title,
+#                 barmode='group')
+
+#     # Update layout
+#     fig.update_layout(xaxis=dict(title='Month',categoryorder='array', categoryarray=month_order), yaxis=dict(title='Relative Humidity'))
+#     # Show the plot
+#     st.plotly_chart(fig, use_container_width=True)
+
+
+# #Scatter Plot with Trend Line: Temperature vs Relative Humidity
+# with col1:
+#     #Scatter plot
+#     from scipy.stats import linregress
+#     import numpy as np
+#     # Create a scatter plot using Plotly Express
+#     fig = go.Figure()
+#     fig.add_trace(go.Scatter(x=filtered_df['temperature_mean'], y=filtered_df['relativehumidity_mean'],
+#                             mode='markers', name='Temperature vs Relative Humidity',
+#                             marker=dict(color='blue'),showlegend=False))
+
+#     # Calculate linear regression
+#     slope, intercept, _, _, _ = linregress(filtered_df['temperature_mean'], filtered_df['relativehumidity_mean'])
+#     x_line = np.linspace(filtered_df['temperature_mean'].min(), filtered_df['temperature_mean'].max(), 100)
+#     y_line = slope * x_line + intercept
+
+#     # Add trend line
+#     fig.add_trace(go.Scatter(x=x_line, y=y_line, mode='lines', name='Trend Line', line=dict(color='red', dash='dash'),showlegend=False))
+
+#     # Update layout
+#     fig.update_layout(title='Scatter Plot with Trend Line: Temperature vs Relative Humidity',
+#                     xaxis=dict(title='Temperature'),
+#                     yaxis=dict(title='Relative Humidity', showgrid=False))
+
+#     # Show the plot
+#     st.plotly_chart(fig, use_container_width=True)
+# #Interactive Correlation Plot: Temperature vs Relative Humidit
+# with col2:
+#     # Create a DataFrame with temperature and relative humidity
+#     correlation_df = filtered_df[['temperature_mean', 'relativehumidity_mean']]
+
+#     # Calculate the correlation matrix
+#     correlation_matrix = correlation_df.corr()
+
+#     # Create an interactive heatmap using plotly express
+#     fig = px.imshow(correlation_matrix, labels=dict(color="Correlation"), color_continuous_scale='Viridis')
+
+#     # Update layout
+#     fig.update_layout(title='Interactive Correlation Plot: Temperature vs Relative Humidity',
+#                     xaxis=dict(title='Variable'),
+#                     yaxis=dict(title='Variable'))
+
+#     # Show the plot
+#     st.plotly_chart(fig, use_container_width=True)
+
+# #for day Comparison between Temperature and Humidity over Days
+# # Group by day and calculate the average for each day
+# grouped_df = filtered_df.groupby('day').agg({'temperature_mean': 'mean', 'relativehumidity_mean': 'mean'}).reset_index()
+
+# # Melt the DataFrame to have a single column for values and another for the variable
+# melted_df = pd.melt(grouped_df, id_vars=['day'], value_vars=['temperature_mean', 'relativehumidity_mean'],
+#                     var_name='Variable', value_name='Value')
+
+# # Create a dual-axis line chart using Plotly Express and make_subplots
+# fig = make_subplots(specs=[[{'secondary_y': True}]])
+
+# # Line colors for temperature and relative humidity
+# temperature_color = 'blue'
+# humidity_color = 'orange'
+
+# # Add traces with specified line colors
+# fig.add_trace(go.Scatter(x=melted_df['day'], y=melted_df['Value'][melted_df['Variable']=='temperature_mean'],
+#                          mode='lines', name='Temperature', line=dict(color=temperature_color)))
+# fig.add_trace(go.Scatter(x=melted_df['day'], y=melted_df['Value'][melted_df['Variable']=='relativehumidity_mean'],
+#                          mode='lines', name='Relative Humidity', line=dict(color=humidity_color)),
+#               secondary_y=True)
+
+# # Update layout
+# fig.update_layout(title='Comparison between Temperature and Humidity over Days',
+#                   xaxis=dict(title='Day'),
+#                   yaxis=dict(title='Temperature', showgrid=False),
+#                   yaxis2=dict(title='Relative Humidity', showgrid=False, overlaying='y', side='right'))
+# # Show the plot
+# st.plotly_chart(fig,use_container_width=True, height = 200)
+
+# #For Months Comparison between Temperature and Humidity over Months
+# # Group by month and calculate the average for each month
+# grouped_df = filtered_df.groupby('month').agg({'temperature_mean': 'mean', 'relativehumidity_mean': 'mean'}).reset_index()
+
+# # Melt the DataFrame to have a single column for values and another for the variable
+# melted_df = pd.melt(grouped_df, id_vars=['month'], value_vars=['temperature_mean', 'relativehumidity_mean'],
+#                     var_name='Variable', value_name='Value')
+
+# # Create a plot using Plotly Express and make_subplots
+# fig = make_subplots(specs=[[{'secondary_y': True}]])
+
+# # Check if only one month is selected
+# if len(filtered_df['month'].unique()) == 1:
+#     # Show a bar plot for mean values when a single month is selected
+#     fig.add_trace(go.Bar(x=['Temperature', 'Relative Humidity'], y=[grouped_df['temperature_mean'].iloc[0], grouped_df['relativehumidity_mean'].iloc[0]],
+#                          marker=dict(color=['blue', 'orange'])))
+# else:
+#     # Show a line plot when multiple months are selected
+#     fig.add_trace(go.Scatter(x=melted_df['month'], y=melted_df['Value'][melted_df['Variable']=='temperature_mean'],
+#                              mode='lines', name='Temperature Mean', line=dict(color='blue')))
+#     fig.add_trace(go.Scatter(x=melted_df['month'], y=melted_df['Value'][melted_df['Variable']=='relativehumidity_mean'],
+#                              mode='lines', name='Relative Humidity Mean', line=dict(color='orange')),
+#                   secondary_y=True)
+
+# # Update layout
+# fig.update_layout(title='Comparison between Temperature and Humidity over Months',
+#                   xaxis=dict(title='Months/Metric'),
+#                   yaxis=dict(title='Temperature', showgrid=False),
+#                   yaxis2=dict(title='Relative Humidity', showgrid=False, overlaying='y', side='right'))
+
+# # Show the plot
+# st.plotly_chart(fig, use_container_width=True, height=200)
